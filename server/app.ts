@@ -16,7 +16,14 @@ export function parseOs(value: unknown): TargetOs {
   return value === "darwin" ? "darwin" : "win32";
 }
 
-export function createApp(options: { serveStatic?: boolean } = {}): Express {
+export function resolveStaticDir(explicit?: string): string {
+  if (explicit) return explicit;
+  if (process.env.ONBOARD_STATIC_DIR) return process.env.ONBOARD_STATIC_DIR;
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, "../dist");
+}
+
+export function createApp(options: { serveStatic?: boolean; staticDir?: string } = {}): Express {
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -146,13 +153,22 @@ export function createApp(options: { serveStatic?: boolean } = {}): Express {
   });
 
   if (options.serveStatic) {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const dist = path.resolve(here, "../dist");
+    const dist = resolveStaticDir(options.staticDir);
     if (fs.existsSync(dist)) {
       app.use(express.static(dist));
       app.use((req, res, next) => {
         if (req.path.startsWith("/api")) return next();
         res.sendFile(path.join(dist, "index.html"));
+      });
+    } else {
+      app.use((req, res, next) => {
+        if (req.path.startsWith("/api")) return next();
+        res.status(200).type("html").send(`<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>装机助手</title></head>
+<body style="font-family:sans-serif;background:#f3eee4;color:#1b1714;padding:48px">
+  <h1>界面文件没有打进安装包</h1>
+  <p>没有找到 ${dist}。请重新下载最新安装包，或在本机运行 npm run desktop。</p>
+</body></html>`);
       });
     }
   }

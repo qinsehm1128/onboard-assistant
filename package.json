@@ -1,7 +1,7 @@
 {
   "name": "onboard-assistant",
   "private": false,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/qinsehm1128/onboard-assistant.git"
@@ -18,7 +18,7 @@
     "dev:api": "tsx server/index.ts",
     "dev:ui": "vite --host 127.0.0.1 --port 43173",
     "desktop": "concurrently -k -n api,ui,app -c teal,yellow,magenta \"tsx server/index.ts\" \"vite --host 127.0.0.1 --port 43173\" \"wait-on http://127.0.0.1:43173 && electron .\"",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && esbuild server/start.ts --bundle --platform=node --format=esm --outfile=dist-server/start.js --packages=external",
     "typecheck": "tsc -b",
     "start": "tsx server/index.ts --serve",
     "test": "tsx --test server/resolve.test.ts server/catalog.test.ts server/detect.test.ts server/app.test.ts server/update.test.ts",
@@ -50,6 +50,7 @@
     "concurrently": "^9.2.1",
     "electron": "^37.3.1",
     "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.9",
     "oxlint": "^1.79.0",
     "tailwindcss": "^4.1.12",
     "tsx": "^4.20.5",

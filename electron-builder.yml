@@ -4,10 +4,11 @@ directories:
   output: release
 files:
   - dist/**
-  - server/**
-  - shared/**
+  - dist-server/**
   - electron/**
   - package.json
+asarUnpack:
+  - dist/**
 mac:
   category: public.app-category.utilities
   target:
