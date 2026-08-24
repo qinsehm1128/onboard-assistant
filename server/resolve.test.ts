@@ -41,5 +41,13 @@ describe("resolveDownload", () => {
     assert.equal(voice.pageOnly, true);
     assert.match(voice.pageUrl || "", /doubao\.com/);
   });
+
+  it("installs Claude CLI from npm, not a PowerShell script", async () => {
+    const spec = await resolveDownload("claude-cli", "win32", "x64");
+    assert.doesNotMatch(spec.url, /\.ps1/);
+    assert.doesNotMatch(spec.filename, /\.ps1$/);
+    assert.match(spec.url, /npmjs\.com/);
+    assert.equal(spec.version, "npm");
+  });
 });
 

@@ -53,6 +53,22 @@ export interface SessionInfo {
   downloadDir: string;
   preview: boolean;
   hostname: string;
+  version: string;
+  repoUrl: string;
+  visibility: "public" | "private";
+}
+
+export type UpdateStatus = "checking" | "current" | "available" | "none" | "error";
+
+export interface UpdateInfo {
+  status: UpdateStatus;
+  currentVersion: string;
+  latestVersion?: string;
+  releaseUrl?: string;
+  releaseName?: string;
+  publishedAt?: string;
+  notes?: string;
+  message: string;
 }
 
 export interface ProgressEvent {

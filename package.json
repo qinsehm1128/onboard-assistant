@@ -1,7 +1,15 @@
 {
   "name": "onboard-assistant",
-  "private": true,
-  "version": "1.0.0",
+  "private": false,
+  "version": "1.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qinsehm1128/onboard-assistant.git"
+  },
+  "homepage": "https://github.com/qinsehm1128/onboard-assistant",
+  "bugs": {
+    "url": "https://github.com/qinsehm1128/onboard-assistant/issues"
+  },
   "description": "公司入职装机助手：检测、下载并安装 Git / Python / Node 及指定办公软件",
   "type": "module",
   "main": "electron/main.mjs",
@@ -13,7 +21,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "start": "tsx server/index.ts --serve",
-    "test": "tsx --test server/resolve.test.ts server/catalog.test.ts server/detect.test.ts server/app.test.ts",
+    "test": "tsx --test server/resolve.test.ts server/catalog.test.ts server/detect.test.ts server/app.test.ts server/update.test.ts",
     "lint": "oxlint server src electron shared",
     "ci": "npm run lint && npm run typecheck && npm test && npm run build",
     "dist:win": "npm run build && electron-builder --win --publish never",
@@ -25,6 +33,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "electron-updater": "^6.6.2",
     "extract-zip": "^2.0.1",
     "lucide-react": "^0.542.0",
     "react": "^19.2.8",

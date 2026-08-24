@@ -10,6 +10,7 @@ import { detectAll, detectItem } from "./detect.ts";
 import { cancelInstall, enqueueInstall, enqueueMany } from "./install.ts";
 import { launchDetached, openPath, openUrl } from "./launch.ts";
 import { downloadDir, hostArch, hostPlatform } from "./paths.ts";
+import { checkForUpdate, currentVersion, REPO_URL } from "./update.ts";
 
 export function parseOs(value: unknown): TargetOs {
   return value === "darwin" ? "darwin" : "win32";
@@ -32,7 +33,18 @@ export function createApp(options: { serveStatic?: boolean } = {}): Express {
       downloadDir: downloadDir(),
       preview: host === "linux",
       hostname: process.env.HOSTNAME || "local",
+      version: currentVersion(),
+      repoUrl: REPO_URL,
+      visibility: "public",
     });
+  });
+
+  app.get("/api/update", async (_req, res) => {
+    try {
+      res.json(await checkForUpdate());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   app.get("/api/catalog", (req, res) => {

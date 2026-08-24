@@ -25,6 +25,13 @@ describe("createApp", () => {
       const session = await (await fetch(`${base}/api/session`)).json();
       assert.ok(session.downloadDir);
       assert.ok(["win32", "darwin", "linux"].includes(session.hostPlatform));
+      assert.equal(session.visibility, "public");
+      assert.match(session.version, /^\d+\.\d+\.\d+/);
+      assert.match(session.repoUrl, /github\.com\/qinsehm1128\/onboard-assistant/);
+
+      const update = await (await fetch(`${base}/api/update`)).json();
+      assert.ok(["current", "available", "none", "error"].includes(update.status));
+      assert.equal(update.currentVersion, session.version);
 
       const win = await (await fetch(`${base}/api/catalog?os=win32`)).json();
       const mac = await (await fetch(`${base}/api/catalog?os=darwin`)).json();

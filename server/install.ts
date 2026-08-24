@@ -23,17 +23,35 @@ export function cancelInstall(id: string): void {
   setState({ id, status: "missing", message: "已取消", progress: 0 });
 }
 
+export function expandIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const item = itemById(id);
+    for (const dep of item?.dependsOn ?? []) add(dep);
+    out.push(id);
+  };
+  for (const id of ids) add(id);
+  return out;
+}
+
 export function enqueueInstall(id: string, os: TargetOs): void {
-  if (queue.some((job) => job.id === id)) return;
-  const current = abortControllers.has(id);
-  if (current) return;
-  queue.push({ id, os });
-  setState({ id, status: "queued", message: "排队等待安装" });
+  for (const next of expandIds([id])) {
+    if (queue.some((job) => job.id === next) || abortControllers.has(next)) continue;
+    queue.push({ id: next, os });
+    setState({
+      id: next,
+      status: "queued",
+      message: next === id ? "排队等待安装" : "作为依赖先安装",
+    });
+  }
   void pump();
 }
 
 export async function enqueueMany(ids: string[], os: TargetOs): Promise<void> {
-  for (const id of ids) enqueueInstall(id, os);
+  for (const id of expandIds(ids)) enqueueInstall(id, os);
 }
 
 async function pump(): Promise<void> {
@@ -63,6 +81,10 @@ export async function runInstall(id: string, os: TargetOs): Promise<ItemState> {
     if (existing.status === "installed" || existing.status === "needs_config") {
       log("info", `${item.name} 已安装，跳过`, id);
       return setState(existing);
+    }
+
+    if (id === "claude-cli") {
+      return await installClaudeCli(os);
     }
 
     if (id === "voice-typing") {
@@ -97,10 +119,6 @@ export async function runInstall(id: string, os: TargetOs): Promise<ItemState> {
 
     if (id === "claudian") {
       return await installClaudian(controller.signal);
-    }
-
-    if (id === "claude-cli") {
-      return await installClaudeCli(os);
     }
 
     if (id === "lark-cli") {
@@ -250,32 +268,41 @@ async function installGitMac(): Promise<ItemState> {
 }
 
 async function installClaudeCli(os: TargetOs): Promise<ItemState> {
-  setState({ id: "claude-cli", status: "installing", message: "正在执行官方命令行安装脚本" });
-  if (!sameOs(os)) {
+  setState({ id: "claude-cli", status: "installing", message: "检查 Python / Node，再用 npm 安装 Claude CLI" });
+  if (sameOs(os)) {
+    const python = await detectItem("python");
+    if (python.status !== "installed") {
+      log("info", "Python 未就绪，先安装 Python", "claude-cli");
+      await runInstall("python", os);
+    }
+    const node = await detectItem("node");
+    if (node.status !== "installed" || !(await commandExists("npm"))) {
+      log("info", "Node / npm 未就绪，先安装 Node.js", "claude-cli");
+      await runInstall("node", os);
+    }
+  }
+
+  if (!sameOs(os) || !(await commandExists("npm"))) {
     return setState({
       id: "claude-cli",
       status: "needs_manual",
-      docsUrl: "https://code.claude.com/docs/zh-CN/quickstart",
-      message: "Claude CLI 需要在目标系统的终端里执行官方安装命令",
-      manualSteps:
-        os === "win32"
-          ? ["打开 PowerShell", "执行 irm https://claude.ai/install.ps1 | iex", "新开终端运行 claude --version"]
-          : ["打开终端", "执行 curl -fsSL https://claude.ai/install.sh | bash", "新开终端运行 claude --version"],
+      docsUrl: "https://www.npmjs.com/package/@anthropic-ai/claude-code",
+      message: "Claude CLI 用 npm 安装，不走 PowerShell 脚本。请先装好 Python 和 Node，再执行下面的命令。",
+      manualSteps: [
+        "确认 python --version 和 node --version 可用",
+        "执行 npm install -g @anthropic-ai/claude-code",
+        "新开终端运行 claude --version",
+      ],
     });
   }
-  const result =
-    os === "win32"
-      ? await runCommand(
-          "powershell",
-          ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://claude.ai/install.ps1 | iex"],
-          { itemId: "claude-cli", timeoutMs: 12 * 60 * 1000 },
-        )
-      : await runCommand("bash", ["-lc", "curl -fsSL https://claude.ai/install.sh | bash"], {
-          itemId: "claude-cli",
-          timeoutMs: 12 * 60 * 1000,
-        });
-  if (result.code === 0) return await finishDetect("claude-cli", "命令行安装完成");
-  throw new Error(result.stderr || result.stdout || "Claude CLI 安装脚本失败");
+
+  setState({ id: "claude-cli", status: "installing", message: "正在执行 npm install -g @anthropic-ai/claude-code" });
+  const result = await runCommand("npm", ["install", "-g", "@anthropic-ai/claude-code"], {
+    itemId: "claude-cli",
+    timeoutMs: 12 * 60 * 1000,
+  });
+  if (result.code === 0) return await finishDetect("claude-cli", "已通过 npm 安装");
+  throw new Error(result.stderr || result.stdout || "npm 安装 Claude CLI 失败");
 }
 
 async function installLarkCli(os: TargetOs, spec: { url: string; filename: string }, signal: AbortSignal): Promise<ItemState> {

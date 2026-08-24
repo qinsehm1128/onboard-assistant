@@ -25,8 +25,11 @@ describe("catalog", () => {
 
   it("keeps install order so Node is ready before Lark CLI", () => {
     const win = itemsForOs("win32").map((item) => item.id);
+    assert.ok(win.indexOf("python") < win.indexOf("claude-cli"));
+    assert.ok(win.indexOf("node") < win.indexOf("claude-cli"));
     assert.ok(win.indexOf("node") < win.indexOf("lark-cli"));
     assert.ok(win.indexOf("obsidian") < win.indexOf("claudian"));
+    assert.deepEqual(itemById("claude-cli")?.dependsOn, ["python", "node"]);
     assert.deepEqual(itemById("lark-cli")?.dependsOn, ["node"]);
     assert.deepEqual(itemById("claudian")?.dependsOn, ["obsidian"]);
   });

@@ -19,4 +19,8 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 forceCodeSigning: false
-publish: null
+publish:
+  provider: github
+  owner: qinsehm1128
+  repo: onboard-assistant
+  releaseType: release

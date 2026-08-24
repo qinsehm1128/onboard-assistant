@@ -58,9 +58,11 @@ export async function resolveDownload(id: string, os: TargetOs, arch: Arch): Pro
         version: "2.0.15",
       };
     case "claude-cli":
-      return os === "win32"
-        ? { url: "https://claude.ai/install.ps1", filename: "install.ps1", version: "latest" }
-        : { url: "https://claude.ai/install.sh", filename: "install.sh", version: "latest" };
+      return {
+        url: "https://www.npmjs.com/package/@anthropic-ai/claude-code",
+        filename: "",
+        version: "npm",
+      };
     case "cc-switch":
       return os === "win32"
         ? {

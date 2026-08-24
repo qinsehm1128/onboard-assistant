@@ -1,4 +1,4 @@
-import type { CatalogItem, CategoryId, ItemState, ProgressEvent, SessionInfo, TargetOs } from "@shared/types";
+import type { CatalogItem, CategoryId, ItemState, ProgressEvent, SessionInfo, TargetOs, UpdateInfo } from "@shared/types";
 
 export interface CatalogResponse {
   os: TargetOs;
@@ -16,6 +16,7 @@ async function readJson<T>(response: Response): Promise<T> {
 
 export const api = {
   session: () => fetch("/api/session").then((res) => readJson<SessionInfo>(res)),
+  update: () => fetch("/api/update").then((res) => readJson<UpdateInfo>(res)),
   catalog: (os: TargetOs) => fetch(`/api/catalog?os=${os}`).then((res) => readJson<CatalogResponse>(res)),
   detect: (os: TargetOs) =>
     fetch(`/api/detect?os=${os}`).then((res) => readJson<{ items: Record<string, ItemState> }>(res)),

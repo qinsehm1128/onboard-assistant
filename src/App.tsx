@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  ArrowUpCircle,
   BookOpen,
   CheckCircle2,
   Download,
@@ -14,7 +15,7 @@ import {
   TriangleAlert,
   Wrench,
 } from "lucide-react";
-import type { CatalogItem, ItemState, ProgressEvent, SessionInfo, TargetOs } from "@shared/types";
+import type { CatalogItem, ItemState, ProgressEvent, SessionInfo, TargetOs, UpdateInfo } from "@shared/types";
 import { api, connectEvents, type CatalogResponse } from "./api";
 import { formatBytes, isBusy, STATUS_LABEL, statusTone } from "./status";
 
@@ -40,6 +41,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyAll, setBusyAll] = useState(false);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   useEffect(() => {
     const stop = connectEvents((event) => {
@@ -64,6 +67,15 @@ export default function App() {
         setSession(nextSession);
         const initialOs: TargetOs = nextSession.hostPlatform === "darwin" ? "darwin" : "win32";
         setOs(initialOs);
+        try {
+          setUpdate(await api.update());
+        } catch {
+          setUpdate({
+            status: "error",
+            currentVersion: nextSession.version,
+            message: "启动时检查更新失败，可稍后重试。",
+          });
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "装机服务未启动");
       } finally {
@@ -138,6 +150,21 @@ export default function App() {
     }
   }
 
+  async function refreshUpdate() {
+    setCheckingUpdate(true);
+    try {
+      setUpdate(await api.update());
+    } catch (err) {
+      setUpdate({
+        status: "error",
+        currentVersion: session?.version || "—",
+        message: err instanceof Error ? err.message : "检查更新失败",
+      });
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
+
   async function handleRedetect() {
     const detected = await api.detect(os);
     setStates((prev) => ({ ...detected.items, ...pickBusy(prev) }));
@@ -164,8 +191,8 @@ export default function App() {
           <p className="text-xs font-semibold tracking-[0.22em] text-teal uppercase">Company setup</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">AI 电脑基础安装</h1>
           <p className="mt-3 text-sm leading-7 text-muted md:text-base">
-            按公司入职清单检测、下载并安装 Git、Python、Node.js，以及 Obsidian、Claude CLI、飞书
-            CLI 等。能静默安装的会自动装；只能下载的，会把安装包放到本机并在卡片上写出下一步。
+            公开仓库，按入职清单检测、下载并安装 Git、Python、Node.js，以及 Obsidian、Claude CLI、飞书
+            CLI 等。Claude CLI 会先装 Python / Node，再用 npm 安装。启动时会检查 GitHub 上的新版本。
           </p>
         </div>
         <OsSwitch
@@ -175,6 +202,15 @@ export default function App() {
           onChange={setOs}
         />
       </header>
+
+      <UpdateBanner
+        update={update}
+        checking={checkingUpdate}
+        version={session?.version}
+        repoUrl={session?.repoUrl}
+        onCheck={() => void refreshUpdate()}
+        onOpen={(url) => void api.openUrl(url)}
+      />
 
       {session?.preview ? (
         <div className="mt-5 rounded-2xl border border-amber/30 bg-amber/8 px-4 py-3 text-sm leading-6 text-ink">
@@ -461,6 +497,61 @@ function LogPanel({ logs }: { logs: ProgressEvent[] }) {
             </div>
           ))
         )}
+      </div>
+    </section>
+  );
+}
+
+function UpdateBanner({
+  update,
+  checking,
+  version,
+  repoUrl,
+  onCheck,
+  onOpen,
+}: {
+  update: UpdateInfo | null;
+  checking: boolean;
+  version?: string;
+  repoUrl?: string;
+  onCheck: () => void;
+  onOpen: (url: string) => void;
+}) {
+  const tone =
+    update?.status === "available"
+      ? "border-teal/30 bg-teal/8"
+      : update?.status === "error"
+        ? "border-rose/30 bg-rose/8"
+        : "border-line bg-card";
+  return (
+    <section className={`card-shadow mt-6 rounded-3xl border px-5 py-4 ${tone}`}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <ArrowUpCircle className="size-4 text-teal" />
+            公开仓库 · 检测更新
+          </div>
+          <p className="mt-1 text-sm leading-6 text-muted">
+            {checking ? "正在检查 GitHub Release…" : update?.message || `当前版本 ${version || "—"}`}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn-secondary" disabled={checking} onClick={onCheck} type="button">
+            {checking ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            检查更新
+          </button>
+          {update?.releaseUrl ? (
+            <button className="btn-primary" onClick={() => onOpen(update.releaseUrl!)} type="button">
+              <Download className="size-4" />
+              {update.status === "available" ? "打开新版本" : "打开发布页"}
+            </button>
+          ) : repoUrl ? (
+            <button className="btn-secondary" onClick={() => onOpen(repoUrl)} type="button">
+              <Globe className="size-4" />
+              打开仓库
+            </button>
+          ) : null}
+        </div>
       </div>
     </section>
   );

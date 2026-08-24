@@ -9,7 +9,7 @@
 | Git / Python / Node.js | Windows 优先 `winget`，macOS 优先 Homebrew；失败则下载官方安装包。Python / Git 安装包尽量静默并写入 PATH。 |
 | Obsidian | 下载官方 exe / dmg。Windows 尝试静默，失败则打开安装向导；macOS 尝试把 app 拷到「应用程序」。 |
 | Claudian 2.0.15 | 下载插件三个文件。若本机已有 Obsidian 库，会写入 `.obsidian/plugins/claudian/`，仍需在 Obsidian 里启用。 |
-| Claude CLI | 官方脚本：macOS `curl … \| bash`，Windows PowerShell `irm … \| iex`。公司网络一般不需要代理。 |
+| Claude CLI | **不用 PowerShell / 官方脚本。** 先装 Python 和 Node，再执行 `npm install -g @anthropic-ai/claude-code`。单独点这项时也会先把依赖排进队列。 |
 | CC Switch v3.15.0 | 下载 msi / dmg 并尝试安装。**密钥需单独发放、单独配置**，助手不会写入任何密钥。 |
 | Clash Verge Rev v2.4.7 | 下载对应系统安装包，能装则装，否则打开安装包。 |
 | 语音打字 | macOS 打开[豆包输入法](https://shurufa.doubao.com/pc)；Windows 打开[微信输入法](https://z.weixin.qq.com/web/change-log/windows)。官网没有稳定直链，所以这一项按「打开官网」处理。 |
@@ -54,7 +54,11 @@ npm run dist:win
 npm run dist:mac
 ```
 
-产物在 `release/`。打包只是外壳，真正干活的是本地装机服务。GitHub Actions 里也可以点 **Desktop packages** 工作流，在 Windows / macOS runner 上直接编译出安装包。
+产物在 `release/`。打包只是外壳，真正干活的是本地装机服务。GitHub Actions 里也可以点 **Desktop packages** 工作流，在 Windows / macOS runner 上直接编译出安装包。打 `v*` 标签时会发布到公开 GitHub Release，桌面端和界面都能检测更新。
+
+仓库是公开的：https://github.com/qinsehm1128/onboard-assistant
+
+启动后界面会检查最新 Release。桌面安装包还会用 `electron-updater` 对照 GitHub 做热更新检测。
 
 ## 共同仓库：编译和测试
 
