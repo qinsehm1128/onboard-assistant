@@ -1,0 +1,46 @@
+{
+  "name": "onboard-assistant",
+  "private": true,
+  "version": "1.0.0",
+  "description": "公司入职装机助手：检测、下载并安装 Git / Python / Node 及指定办公软件",
+  "type": "module",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "dev": "concurrently -k -n api,ui -c teal,yellow \"tsx server/index.ts\" \"vite --host 127.0.0.1 --port 43173\"",
+    "dev:api": "tsx server/index.ts",
+    "dev:ui": "vite --host 127.0.0.1 --port 43173",
+    "desktop": "concurrently -k -n api,ui,app -c teal,yellow,magenta \"tsx server/index.ts\" \"vite --host 127.0.0.1 --port 43173\" \"wait-on http://127.0.0.1:43173 && electron .\"",
+    "build": "tsc -b && vite build",
+    "start": "tsx server/index.ts --serve",
+    "test": "tsx --test server/resolve.test.ts",
+    "lint": "oxlint server src electron shared",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "extract-zip": "^2.0.1",
+    "lucide-react": "^0.542.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.12",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "concurrently": "^9.2.1",
+    "electron": "^37.3.1",
+    "electron-builder": "^26.0.12",
+    "oxlint": "^1.79.0",
+    "tailwindcss": "^4.1.12",
+    "tsx": "^4.20.5",
+    "typescript": "~5.9.2",
+    "vite": "^8.2.2",
+    "wait-on": "^8.0.4"
+  }
+}

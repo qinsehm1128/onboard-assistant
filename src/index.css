@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Noto Sans SC", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #1b1714;
+  --color-muted: #6b6258;
+  --color-paper: #f3eee4;
+  --color-card: #fffdf8;
+  --color-line: #e4d8c6;
+  --color-teal: #0f6e6a;
+  --color-teal-dark: #0b5552;
+  --color-amber: #b7791f;
+  --color-rose: #b42318;
+  --color-moss: #3f6f32;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, #efe4cf 0%, transparent 55%),
+    radial-gradient(900px 400px at 100% 0%, #dce8e2 0%, transparent 50%),
+    var(--color-paper);
+  color: var(--color-ink);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.card-shadow {
+  box-shadow: 0 1px 0 rgba(27, 23, 20, 0.04), 0 12px 32px -24px rgba(27, 23, 20, 0.35);
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: 0.15s ease;
+}
+
+.btn-primary {
+  background: var(--color-teal);
+  color: #fffdf8;
+}
+
+.btn-primary:hover {
+  background: var(--color-teal-dark);
+}
+
+.btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.btn-secondary {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+}
+
+.btn-secondary:hover {
+  border-color: #c8b89f;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-muted);
+  border: 1px dashed var(--color-line);
+}
+
+.btn-ghost:hover {
+  color: var(--color-ink);
+  border-color: #c8b89f;
+}

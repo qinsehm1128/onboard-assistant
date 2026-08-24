@@ -1,0 +1,20 @@
+appId: com.company.onboard-assistant
+productName: AI电脑基础安装
+directories:
+  output: release
+files:
+  - dist/**
+  - server/**
+  - shared/**
+  - electron/**
+  - package.json
+mac:
+  category: public.app-category.utilities
+  target:
+    - dmg
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
