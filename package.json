@@ -11,11 +11,16 @@
     "dev:ui": "vite --host 127.0.0.1 --port 43173",
     "desktop": "concurrently -k -n api,ui,app -c teal,yellow,magenta \"tsx server/index.ts\" \"vite --host 127.0.0.1 --port 43173\" \"wait-on http://127.0.0.1:43173 && electron .\"",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "start": "tsx server/index.ts --serve",
-    "test": "tsx --test server/resolve.test.ts",
+    "test": "tsx --test server/resolve.test.ts server/catalog.test.ts server/detect.test.ts server/app.test.ts",
     "lint": "oxlint server src electron shared",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:mac": "npm run build && electron-builder --mac"
+    "ci": "npm run lint && npm run typecheck && npm test && npm run build",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -21,10 +21,10 @@
 
 ## 本机运行
 
-需要本机已有 Node.js 18+（用这个助手装 Node 是给员工电脑用的；开发者自己先有 Node 即可）。
+需要本机已有 Node.js 20+（用这个助手装 Node 是给员工电脑用的；开发者自己先有 Node 即可）。
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -54,7 +54,51 @@ npm run dist:win
 npm run dist:mac
 ```
 
-产物在 `release/`。打包只是外壳，真正干活的是本地装机服务。
+产物在 `release/`。打包只是外壳，真正干活的是本地装机服务。GitHub Actions 里也可以点 **Desktop packages** 工作流，在 Windows / macOS runner 上直接编译出安装包。
+
+## 共同仓库：编译和测试
+
+这个目录就是给团队共用的仓库。任何人 clone 下来后，一条命令就能和 CI 跑同一套检查：
+
+```bash
+npm ci
+npm run ci
+```
+
+`npm run ci` 会依次做：
+
+1. `lint` — 静态检查
+2. `typecheck` — TypeScript 编译检查
+3. `test` — 清单、下载解析、本机检测、HTTP API
+4. `build` — 编译出 `dist/` 网页
+
+### GitHub Actions
+
+推到 GitHub 后会自动跑：
+
+| 工作流 | 何时跑 | 做什么 |
+| --- | --- | --- |
+| [CI](.github/workflows/ci.yml) | 推送 `main`、Pull Request、手动触发 | 在 Ubuntu / Windows / macOS 上安装依赖、检查、测试、编译，并上传 `dist` |
+| [Desktop packages](.github/workflows/desktop.yml) | 打 `v*` 标签，或 Actions 里手动选系统 | 在官方 runner 上编译 Windows 安装包 / macOS dmg，上传 Artifact |
+
+把本仓库接到公司 GitHub 组织（只需做一次）：
+
+```bash
+# 在 GitHub 上新建空仓库，例如 your-org/onboard-assistant，不要勾选 README
+git remote add github git@github.com:YOUR_ORG/onboard-assistant.git
+git push -u github main
+```
+
+之后同事只需要：
+
+```bash
+git clone git@github.com:YOUR_ORG/onboard-assistant.git
+cd onboard-assistant
+npm ci
+npm run ci
+```
+
+Dependabot 会每周开 PR 升级 npm 和 GitHub Actions。合并前 CI 必须绿。
 
 ## 界面会告诉你什么
 

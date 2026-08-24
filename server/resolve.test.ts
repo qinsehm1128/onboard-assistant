@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { pickAsset } from "./resolve.ts";
+import { pickAsset, resolveDownload } from "./resolve.ts";
 
 describe("pickAsset", () => {
   const assets = [
@@ -23,3 +23,23 @@ describe("pickAsset", () => {
     assert.equal(pickAsset(assets, [/\.msi$/]), undefined);
   });
 });
+
+describe("resolveDownload", () => {
+  it("returns pinned Windows and macOS installers without calling GitHub", async () => {
+    const clashWin = await resolveDownload("clash-verge", "win32", "x64");
+    const clashMac = await resolveDownload("clash-verge", "darwin", "arm64");
+    const switchWin = await resolveDownload("cc-switch", "win32", "x64");
+    const larkMac = await resolveDownload("lark-cli", "darwin", "arm64");
+    assert.match(clashWin.filename, /x64-setup\.exe$/);
+    assert.match(clashMac.filename, /aarch64\.dmg$/);
+    assert.match(switchWin.filename, /\.msi$/);
+    assert.match(larkMac.filename, /darwin-arm64\.tar\.gz$/);
+  });
+
+  it("marks voice typing as an official-page download", async () => {
+    const voice = await resolveDownload("voice-typing", "darwin", "arm64");
+    assert.equal(voice.pageOnly, true);
+    assert.match(voice.pageUrl || "", /doubao\.com/);
+  });
+});
+
