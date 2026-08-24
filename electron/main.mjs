@@ -5,6 +5,8 @@ import { pathToFileURL } from "node:url";
 const API_PORT = 43174;
 const DEV_UI = process.env.ONBOARD_UI_URL || "http://127.0.0.1:43173";
 
+let mainWindow;
+
 function preloadPath() {
   return path.join(import.meta.dirname, "preload.cjs");
 }
@@ -64,6 +66,30 @@ async function resolveUiUrl() {
   return startPackagedServer();
 }
 
+function compareVersions(a, b) {
+  const left = String(a || "")
+    .replace(/^v/i, "")
+    .split(".")
+    .map((part) => Number.parseInt(part, 10) || 0);
+  const right = String(b || "")
+    .replace(/^v/i, "")
+    .split(".")
+    .map((part) => Number.parseInt(part, 10) || 0);
+  const len = Math.max(left.length, right.length);
+  for (let i = 0; i < len; i += 1) {
+    const d = (left[i] ?? 0) - (right[i] ?? 0);
+    if (d > 0) return 1;
+    if (d < 0) return -1;
+  }
+  return 0;
+}
+
+function sendUpdater(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("updater:status", payload);
+  }
+}
+
 async function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -79,6 +105,11 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  mainWindow = win;
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = undefined;
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -112,22 +143,72 @@ async function setupUpdater() {
     if (!autoUpdater) return;
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoRunAppAfterInstall = true;
+    autoUpdater.on("checking-for-update", () => {
+      sendUpdater({ phase: "checking", message: "正在检查应用内更新…" });
+    });
+    autoUpdater.on("update-available", (info) => {
+      sendUpdater({
+        phase: "available",
+        version: info.version,
+        message: `发现新版本 ${info.version}，可以直接在应用里下载安装。`,
+      });
+    });
+    autoUpdater.on("update-not-available", () => {
+      sendUpdater({ phase: "idle", message: `已是最新版本 ${app.getVersion()}。` });
+    });
+    autoUpdater.on("download-progress", (progress) => {
+      sendUpdater({
+        phase: "downloading",
+        percent: progress.percent,
+        message: `正在下载更新 ${Math.round(progress.percent || 0)}%`,
+      });
+    });
+    autoUpdater.on("update-downloaded", (info) => {
+      sendUpdater({
+        phase: "ready",
+        version: info.version,
+        percent: 100,
+        message: `新版本 ${info.version} 已下载，重启后完成安装。`,
+      });
+    });
+    autoUpdater.on("error", (error) => {
+      sendUpdater({
+        phase: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
     ipcMain.handle("updater:check", async () => {
-      const result = await autoUpdater.checkForUpdates();
-      return {
-        currentVersion: app.getVersion(),
-        latestVersion: result?.updateInfo?.version,
-        available: Boolean(result?.updateInfo?.version && result.updateInfo.version !== app.getVersion()),
-      };
+      try {
+        const result = await autoUpdater.checkForUpdates();
+        const latest = result?.updateInfo?.version;
+        return {
+          currentVersion: app.getVersion(),
+          latestVersion: latest,
+          available: Boolean(latest && compareVersions(latest, app.getVersion()) > 0),
+        };
+      } catch (error) {
+        return {
+          currentVersion: app.getVersion(),
+          available: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     });
     ipcMain.handle("updater:download", async () => {
-      await autoUpdater.downloadUpdate();
-      return { ok: true };
+      try {
+        await autoUpdater.downloadUpdate();
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
     });
     ipcMain.handle("updater:install", () => {
-      autoUpdater.quitAndInstall();
+      autoUpdater.quitAndInstall(false, true);
     });
-    await autoUpdater.checkForUpdates();
+    await autoUpdater.checkForUpdates().catch((error) => {
+      console.warn("auto-update check failed", error);
+    });
   } catch (error) {
     console.warn("auto-update unavailable", error);
   }

@@ -68,7 +68,7 @@ export default function App() {
         const initialOs: TargetOs = nextSession.hostPlatform === "darwin" ? "darwin" : "win32";
         setOs(initialOs);
         try {
-          setUpdate(await api.update());
+          setUpdate(await loadUpdate(nextSession.version));
         } catch {
           setUpdate({
             status: "error",
@@ -87,6 +87,28 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const stop = window.onboardDesktop?.onUpdate?.((payload) => {
+      setUpdate((prev) => {
+        const currentVersion = prev?.currentVersion || session?.version || "";
+        const latest = payload.version || prev?.latestVersion;
+        const available = payload.phase === "available" || payload.phase === "downloading" || payload.phase === "ready";
+        return {
+          status: payload.phase === "error" ? "error" : available ? "available" : prev?.status || "current",
+          currentVersion,
+          latestVersion: latest,
+          releaseUrl: prev?.releaseUrl,
+          message: payload.message || prev?.message || `当前版本 ${currentVersion}`,
+          canApplyInApp: true,
+          applyPhase: payload.phase === "available" ? "idle" : payload.phase === "checking" ? "checking" : payload.phase,
+          downloadPercent: payload.percent,
+          applyError: payload.phase === "error" ? payload.message : undefined,
+        };
+      });
+    });
+    return () => stop?.();
+  }, [session]);
 
   useEffect(() => {
     if (!session) return;
@@ -153,7 +175,7 @@ export default function App() {
   async function refreshUpdate() {
     setCheckingUpdate(true);
     try {
-      setUpdate(await api.update());
+      setUpdate(await loadUpdate(session?.version || "—"));
     } catch (err) {
       setUpdate({
         status: "error",
@@ -163,6 +185,37 @@ export default function App() {
     } finally {
       setCheckingUpdate(false);
     }
+  }
+
+  async function applyUpdate() {
+    const desktop = window.onboardDesktop;
+    if (!desktop?.downloadUpdate || !desktop.installUpdate) {
+      if (update?.releaseUrl) await api.openUrl(update.releaseUrl);
+      return;
+    }
+    setUpdate((prev) =>
+      prev
+        ? { ...prev, applyPhase: "downloading", downloadPercent: 0, message: "正在下载新版本…" }
+        : prev,
+    );
+    const downloaded = await desktop.downloadUpdate();
+    if (!downloaded.ok) {
+      setUpdate((prev) =>
+        prev
+          ? {
+              ...prev,
+              applyPhase: "error",
+              applyError: downloaded.error,
+              message: downloaded.error || "下载更新失败，可改为打开安装包页面。",
+            }
+          : prev,
+      );
+      return;
+    }
+    setUpdate((prev) =>
+      prev ? { ...prev, applyPhase: "ready", downloadPercent: 100, message: "已下载，即将重启安装。" } : prev,
+    );
+    await desktop.installUpdate();
   }
 
   async function handleRedetect() {
@@ -192,7 +245,7 @@ export default function App() {
           <h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">AI 电脑基础安装</h1>
           <p className="mt-3 text-sm leading-7 text-muted md:text-base">
             公开仓库，按入职清单检测、下载并安装 Git、Python、Node.js，以及 Obsidian、Claude CLI、飞书
-            CLI 等。Claude CLI 会先装 Python / Node，再用 npm 安装。启动时会检查 GitHub 上的新版本。
+            CLI 等。Claude CLI 会先装 Python / Node，再用 npm 安装。桌面版发现新版本后可以直接下载并重启安装。
           </p>
         </div>
         <OsSwitch
@@ -210,6 +263,7 @@ export default function App() {
         repoUrl={session?.repoUrl}
         onCheck={() => void refreshUpdate()}
         onOpen={(url) => void api.openUrl(url)}
+        onApply={() => void applyUpdate()}
       />
 
       {session?.preview ? (
@@ -502,6 +556,38 @@ function LogPanel({ logs }: { logs: ProgressEvent[] }) {
   );
 }
 
+async function loadUpdate(fallbackVersion: string): Promise<UpdateInfo> {
+  const web = await api.update().catch(
+    (): UpdateInfo => ({
+      status: "error",
+      currentVersion: fallbackVersion,
+      message: "检查 GitHub Release 失败",
+    }),
+  );
+  const desktop = window.onboardDesktop;
+  if (!desktop?.checkUpdate) return { ...web, canApplyInApp: false };
+  try {
+    const result = await desktop.checkUpdate();
+    const available = Boolean(result.available || (web.status === "available" && result.latestVersion));
+    const latest = result.latestVersion || web.latestVersion;
+    return {
+      ...web,
+      latestVersion: latest,
+      currentVersion: result.currentVersion || web.currentVersion,
+      status: result.error ? web.status : available ? "available" : web.status,
+      canApplyInApp: !result.error,
+      applyPhase: "idle",
+      message: result.error
+        ? web.message
+        : available
+          ? `发现新版本 ${latest}，当前是 ${result.currentVersion || web.currentVersion}。可直接在应用内下载安装。`
+          : web.message,
+    };
+  } catch {
+    return { ...web, canApplyInApp: false };
+  }
+}
+
 function UpdateBanner({
   update,
   checking,
@@ -509,6 +595,7 @@ function UpdateBanner({
   repoUrl,
   onCheck,
   onOpen,
+  onApply,
 }: {
   update: UpdateInfo | null;
   checking: boolean;
@@ -516,6 +603,7 @@ function UpdateBanner({
   repoUrl?: string;
   onCheck: () => void;
   onOpen: (url: string) => void;
+  onApply: () => void;
 }) {
   const tone =
     update?.status === "available"
@@ -534,16 +622,41 @@ function UpdateBanner({
           <p className="mt-1 text-sm leading-6 text-muted">
             {checking ? "正在检查 GitHub Release…" : update?.message || `当前版本 ${version || "—"}`}
           </p>
+          {update?.applyPhase === "downloading" ? (
+            <div className="mt-3">
+              <ProgressBar value={update.downloadPercent ?? 0} />
+            </div>
+          ) : null}
+          {update?.applyError ? <p className="mt-2 text-sm text-rose">{update.applyError}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="btn-secondary" disabled={checking} onClick={onCheck} type="button">
             {checking ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             检查更新
           </button>
+          {update?.status === "available" && update.canApplyInApp ? (
+            <button
+              className="btn-primary"
+              disabled={update.applyPhase === "downloading"}
+              onClick={onApply}
+              type="button"
+            >
+              {update.applyPhase === "downloading" ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              {update.applyPhase === "ready" ? "立即重启安装" : update.applyPhase === "downloading" ? "正在下载" : "下载并安装"}
+            </button>
+          ) : null}
           {update?.releaseUrl ? (
-            <button className="btn-primary" onClick={() => onOpen(update.releaseUrl!)} type="button">
-              <Download className="size-4" />
-              {update.status === "available" ? "打开新版本" : "打开发布页"}
+            <button
+              className={update?.canApplyInApp && update.status === "available" ? "btn-secondary" : "btn-primary"}
+              onClick={() => onOpen(update.releaseUrl!)}
+              type="button"
+            >
+              <Globe className="size-4" />
+              {update.status === "available" ? "打开安装包页面" : "打开发布页"}
             </button>
           ) : repoUrl ? (
             <button className="btn-secondary" onClick={() => onOpen(repoUrl)} type="button">

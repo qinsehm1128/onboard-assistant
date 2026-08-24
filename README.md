@@ -13,7 +13,7 @@
 | CC Switch v3.15.0 | 下载 msi / dmg 并尝试安装。**密钥需单独发放、单独配置**，助手不会写入任何密钥。 |
 | Clash Verge Rev v2.4.7 | 下载对应系统安装包，能装则装，否则打开安装包。 |
 | 语音打字 | macOS 打开[豆包输入法](https://shurufa.doubao.com/pc)；Windows 打开[微信输入法](https://z.weixin.qq.com/web/change-log/windows)。官网没有稳定直链，所以这一项按「打开官网」处理。 |
-| 飞书 CLI | 优先 `npx @larksuite/cli@latest install`，失败再下载官方二进制并解压到 `~/.local/bin`。 |
+| 飞书 CLI | 优先 `npm install -g @larksuite/cli`（官方 Go 二进制由 postinstall 下载）。检测会找 `%APPDATA%\\npm`、`~/.local/bin` 等，不只依赖 PATH。失败再解压官方 zip。 |
 
 安装包默认放在：
 
@@ -60,7 +60,7 @@ npm run dist:mac
 
 仓库是公开的：https://github.com/qinsehm1128/onboard-assistant
 
-启动后界面会检查最新 Release。桌面安装包还会用 `electron-updater` 对照 GitHub 做热更新检测。
+启动后界面会检查最新 Release。桌面安装包可以用 **下载并安装** 在应用内完成更新（下载 GitHub 上的安装包后重启替换），不必先打开网页再手动重装。浏览器预览环境仍会打开 Release 页面。
 
 ## 共同仓库：编译和测试
 

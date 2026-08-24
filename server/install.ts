@@ -243,7 +243,7 @@ function formatBytes(value: number): string {
 }
 
 async function finishDetect(id: string, message: string): Promise<ItemState> {
-  if (id === "node" || id === "python" || id === "git") {
+  if (id === "node" || id === "python" || id === "git" || id === "lark-cli" || id === "claude-cli") {
     const nodeHome = findNodeHome();
     if (nodeHome) rememberPathEntry(nodeHome);
     refreshProcessPath();
@@ -316,20 +316,32 @@ async function installClaudeCli(os: TargetOs): Promise<ItemState> {
 
 async function installLarkCli(os: TargetOs, spec: { url: string; filename: string }, signal: AbortSignal): Promise<ItemState> {
   refreshProcessPath();
-  if (sameOs(os)) {
+  if (sameOs(os) && (await commandExists("npm"))) {
+    setState({ id: "lark-cli", status: "installing", message: "正在执行 npm install -g @larksuite/cli" });
     try {
-      if (await commandExists("npx")) {
-        setState({ id: "lark-cli", status: "installing", message: "正在执行 npx @larksuite/cli@latest install" });
-        const result = await runCommand("npx", ["--yes", "@larksuite/cli@latest", "install"], {
-          itemId: "lark-cli",
-          timeoutMs: 12 * 60 * 1000,
-        });
-        if (result.code === 0) return await finishDetect("lark-cli", "已通过官方 npx 安装");
-        log("warn", "npx 安装未成功，改为下载官方二进制", "lark-cli");
+      const npm = await runCommand("npm", ["install", "-g", "@larksuite/cli"], {
+        itemId: "lark-cli",
+        timeoutMs: 12 * 60 * 1000,
+      });
+      if (npm.code === 0) {
+        refreshProcessPath();
+        try {
+          await runCommand("npx", ["--yes", "skills", "add", "larksuite/cli", "-y", "-g"], {
+            itemId: "lark-cli",
+            timeoutMs: 6 * 60 * 1000,
+          });
+        } catch {
+          log("warn", "CLI 已装好，技能包可以稍后用 npx skills add larksuite/cli -y -g 补装", "lark-cli");
+        }
+        const done = await finishDetect("lark-cli", "已通过 npm 安装官方飞书 CLI");
+        if (done.status === "installed") return done;
+        log("warn", "npm 安装完成，但当前进程还没扫到 lark-cli，继续解压官方二进制", "lark-cli");
+      } else {
+        log("warn", npm.stderr || "npm 安装飞书 CLI 未成功，改为下载官方二进制", "lark-cli");
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      log("warn", `npx 无法启动，改为下载官方二进制：${detail}`, "lark-cli");
+      log("warn", `npm 无法安装飞书 CLI，改为下载官方二进制：${detail}`, "lark-cli");
     }
   }
 

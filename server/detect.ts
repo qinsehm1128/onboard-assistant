@@ -5,6 +5,7 @@ import type { ItemState, TargetOs } from "../shared/types.ts";
 import { runCommand, tryVersion } from "./exec.ts";
 import {
   claudianManifestPath,
+  findLarkCli,
   isNoisyDirectory,
   obsidianConfigCandidates,
   obsidianExeCandidates,
@@ -14,7 +15,7 @@ import {
   walkFind,
   windowsDriveRoots,
 } from "./locate.ts";
-import { firstExisting, hostPlatform } from "./paths.ts";
+import { firstExisting, hostPlatform, refreshProcessPath } from "./paths.ts";
 
 interface DiscoverSnapshot {
   at: number;
@@ -283,7 +284,20 @@ export async function detectItem(id: string): Promise<ItemState> {
         message: "输入法需要在官网下载，并在系统设置中启用",
       };
     case "lark-cli": {
-      const version = (await tryVersion("lark-cli")) || (await tryVersion("lark"));
+      refreshProcessPath();
+      const found = findLarkCli();
+      const version = found
+        ? await tryVersion(found)
+        : (await tryVersion("lark-cli")) || (await tryVersion("lark"));
+      if (found) {
+        return {
+          id,
+          status: "installed",
+          version,
+          filePath: found,
+          message: version ? `已安装 ${version}` : "已检测到飞书 CLI（官方 lark-cli）",
+        };
+      }
       return appState(id, version ? "lark-cli" : undefined, version);
     }
     default:

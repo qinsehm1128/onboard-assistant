@@ -31,4 +31,9 @@ describe("detectItem", () => {
   it("lists Obsidian vaults without throwing when none are registered", () => {
     assert.ok(Array.isArray(listObsidianVaults()));
   });
+
+  it("detects Feishu CLI without throwing when it is absent", async () => {
+    const lark = await detectItem("lark-cli");
+    assert.ok(lark.status === "missing" || lark.status === "installed");
+  });
 });

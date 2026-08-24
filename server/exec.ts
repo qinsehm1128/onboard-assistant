@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
-import { findNodeHome, findNpmInvocation } from "./locate.ts";
-import { enrichedEnv } from "./paths.ts";
+import { extraPathEntries, enrichedEnv } from "./paths.ts";
+import { findLarkCli, findNodeHome, findNpmInvocation, windowsNeedsShell } from "./locate.ts";
 import { log } from "./bus.ts";
 
 export interface RunResult {
@@ -69,6 +70,26 @@ export function runCommand(
   });
 }
 
+function resolveBareCommand(command: string): string | undefined {
+  if (command === "lark-cli" || command === "lark") {
+    const found = findLarkCli();
+    if (found) return found;
+  }
+  const names =
+    process.platform === "win32" ? [`${command}.exe`, `${command}.cmd`, command] : [command];
+  for (const dir of extraPathEntries()) {
+    for (const name of names) {
+      const full = path.join(dir, name);
+      try {
+        if (fs.existsSync(full)) return full;
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return undefined;
+}
+
 function rewriteCommand(
   command: string,
   args: string[],
@@ -87,7 +108,13 @@ function rewriteCommand(
       return { command, args, shell: true };
     }
   }
-  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(command)) {
+  if (!command.includes(path.sep) && !command.includes("/") && !path.win32.isAbsolute(command)) {
+    const resolved = resolveBareCommand(command);
+    if (resolved) {
+      return { command: resolved, args, shell: shell || windowsNeedsShell(resolved) };
+    }
+  }
+  if (windowsNeedsShell(command)) {
     return { command, args, shell: true };
   }
   return { command, args, shell };
@@ -95,6 +122,7 @@ function rewriteCommand(
 
 export async function commandExists(bin: string): Promise<boolean> {
   if ((bin === "npm" || bin === "npx") && findNpmInvocation(bin)) return true;
+  if ((bin === "lark-cli" || bin === "lark") && findLarkCli()) return true;
   const probe = process.platform === "win32" ? ["where", [bin]] : ["which", [bin]];
   try {
     const result = await runCommand(probe[0] as string, probe[1] as string[], { timeoutMs: 8000 });
@@ -104,21 +132,27 @@ export async function commandExists(bin: string): Promise<boolean> {
   }
 }
 
-export async function tryVersion(bin: string, args = ["--version"]): Promise<string | undefined> {
-  try {
-    const resolved =
-      bin === "node"
-        ? (() => {
-            const home = findNodeHome();
-            return home ? path.join(home, process.platform === "win32" ? "node.exe" : "node") : bin;
-          })()
-        : bin;
-    const result = await runCommand(resolved, args, { timeoutMs: 8000 });
-    if (result.code !== 0) return undefined;
-    const text = `${result.stdout}\n${result.stderr}`.trim();
-    const match = text.match(/v?\d+\.\d+(\.\d+)?/);
-    return match?.[0] ?? text.split(/\r?\n/)[0]?.trim();
-  } catch {
-    return undefined;
+export async function tryVersion(bin: string, args?: string[]): Promise<string | undefined> {
+  const resolved =
+    bin === "node"
+      ? (() => {
+          const home = findNodeHome();
+          return home ? path.join(home, process.platform === "win32" ? "node.exe" : "node") : bin;
+        })()
+      : bin;
+  const attempts = args ? [args] : [["--version"], ["version"], ["-v"]];
+  for (const flag of attempts) {
+    try {
+      const result = await runCommand(resolved, flag, { timeoutMs: 8000 });
+      if (result.code !== 0) continue;
+      const text = `${result.stdout}\n${result.stderr}`.trim();
+      const match = text.match(/v?\d+\.\d+(\.\d+)?/);
+      if (match?.[0]) return match[0];
+      const line = text.split(/\r?\n/)[0]?.trim();
+      if (line) return line;
+    } catch {
+      // try the next flag
+    }
   }
+  return undefined;
 }

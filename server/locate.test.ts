@@ -14,6 +14,7 @@ import {
   windowsDriveRoots,
   isWindowsSystemDrive,
   obsidianWalkRoots,
+  larkCliCandidates,
 } from "./locate.ts";
 
 describe("windowsDriveRoots", () => {
@@ -117,6 +118,19 @@ describe("findNpmInvocation", () => {
     const exists = (candidate: string) => candidate === path.win32.join(home, "npm.cmd");
     const invocation = resolveNpmInvocationForHome("npm", home, "win32", exists);
     assert.deepEqual(invocation, { command: path.win32.join(home, "npm.cmd"), prefix: [], shell: true });
+  });
+});
+
+describe("larkCliCandidates", () => {
+  it("looks in the npm global folder and the helper fallback directory", () => {
+    const candidates = larkCliCandidates({
+      home: "C:\\Users\\alex",
+      env: { APPDATA: "C:\\Users\\alex\\AppData\\Roaming" },
+      nodeHome: "C:\\Program Files\\nodejs",
+    });
+    assert.ok(candidates.some((entry) => /Roaming.npm.lark-cli/i.test(entry)));
+    assert.ok(candidates.some((entry) => /@larksuite.cli.bin.lark-cli/i.test(entry)));
+    assert.ok(candidates.some((entry) => /\.local.bin.lark-cli/i.test(entry)));
   });
 });
 

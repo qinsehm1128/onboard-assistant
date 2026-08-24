@@ -60,6 +60,8 @@ export interface SessionInfo {
 
 export type UpdateStatus = "checking" | "current" | "available" | "none" | "error";
 
+export type ApplyPhase = "idle" | "checking" | "downloading" | "ready" | "error";
+
 export interface UpdateInfo {
   status: UpdateStatus;
   currentVersion: string;
@@ -69,6 +71,10 @@ export interface UpdateInfo {
   publishedAt?: string;
   notes?: string;
   message: string;
+  canApplyInApp?: boolean;
+  applyPhase?: ApplyPhase;
+  downloadPercent?: number;
+  applyError?: string;
 }
 
 export interface ProgressEvent {

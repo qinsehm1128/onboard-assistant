@@ -277,6 +277,40 @@ export function findNpmInvocation(
   return resolveNpmInvocationForHome(bin, home, process.platform, exists);
 }
 
+export function larkCliCandidates(input: {
+  home: string;
+  env: NodeJS.ProcessEnv;
+  nodeHome?: string;
+}): string[] {
+  const roaming = input.env.APPDATA || path.join(input.home, "AppData", "Roaming");
+  const local = input.env.LOCALAPPDATA || path.join(input.home, "AppData", "Local");
+  const names = process.platform === "win32" ? ["lark-cli.exe", "lark-cli.cmd", "lark-cli"] : ["lark-cli"];
+  const dirs = uniquePaths([
+    path.join(input.home, ".local", "bin"),
+    path.join(roaming, "npm"),
+    path.join(roaming, "npm", "node_modules", "@larksuite", "cli", "bin"),
+    path.join(input.home, "Downloads", "onboard-assistant", "lark-cli", "extracted"),
+    input.nodeHome,
+    path.join(local, "fnm", "aliases", "default"),
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    path.join(input.home, ".npm-global", "bin"),
+  ]);
+  return uniquePaths(dirs.flatMap((dir) => (dir ? names.map((name) => path.join(dir, name)) : [])));
+}
+
+export function findLarkCli(exists: (candidate: string) => boolean = pathExists): string | undefined {
+  return larkCliCandidates({
+    home: os.homedir(),
+    env: process.env,
+    nodeHome: findNodeHome(exists),
+  }).find(exists);
+}
+
+export function windowsNeedsShell(command: string): boolean {
+  return process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
+}
+
 function pathExists(candidate: string): boolean {
   try {
     return fs.existsSync(candidate);
