@@ -12,6 +12,8 @@ import {
   resolveNpmInvocationForHome,
   walkFind,
   windowsDriveRoots,
+  isWindowsSystemDrive,
+  obsidianWalkRoots,
 } from "./locate.ts";
 
 describe("windowsDriveRoots", () => {
@@ -21,6 +23,18 @@ describe("windowsDriveRoots", () => {
       windowsDriveRoots((candidate) => exists.has(candidate)),
       ["C:\\", "D:\\", "E:\\"],
     );
+  });
+
+  it("does not recurse the Windows system drive root", () => {
+    assert.equal(isWindowsSystemDrive("C:\\"), true);
+    assert.equal(isWindowsSystemDrive("D:\\"), false);
+    const roots = obsidianWalkRoots({
+      drives: ["C:\\", "D:\\"],
+      localAppData: "C:\\Users\\alex\\AppData\\Local",
+    });
+    assert.ok(!roots.some((entry) => /^[cC]:\\$/.test(entry)));
+    assert.ok(roots.some((entry) => /Program Files/i.test(entry)));
+    assert.ok(roots.some((entry) => entry.startsWith("D:")));
   });
 });
 

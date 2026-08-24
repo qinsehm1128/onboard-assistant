@@ -8,6 +8,7 @@ import {
   isNoisyDirectory,
   obsidianConfigCandidates,
   obsidianExeCandidates,
+  obsidianWalkRoots,
   parseObsidianVaultPaths,
   uniquePaths,
   walkFind,
@@ -66,11 +67,19 @@ function findObsidianExecutableSync(): string | undefined {
     }),
   );
   if (known) return known;
-  return walkFind(windowsDriveRoots(), "Obsidian.exe", {
-    maxDepth: 4,
-    maxVisits: 8000,
-    stopAfter: 4,
-  })[0];
+  const local = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+  return walkFind(
+    obsidianWalkRoots({
+      drives: windowsDriveRoots(),
+      localAppData: local,
+    }),
+    "Obsidian.exe",
+    {
+      maxDepth: 3,
+      maxVisits: 2000,
+      stopAfter: 2,
+    },
+  )[0];
 }
 
 function vaultScanRoots(): string[] {
@@ -117,8 +126,8 @@ function collectVaults(exe?: string): string[] {
     }
   }
   const fromWalk = walkFind(vaultScanRoots(), ".obsidian", {
-    maxDepth: 5,
-    maxVisits: 6000,
+    maxDepth: 4,
+    maxVisits: 2000,
     stopAfter: 20,
     skipDir: (name) => isNoisyDirectory(name) || name.toLowerCase() === "library",
   }).map((dir) => path.dirname(dir));
@@ -157,24 +166,6 @@ async function windowsLocateObsidian(): Promise<string | undefined> {
     } catch {
       // registry key may not exist
     }
-  }
-  try {
-    const result = await runCommand(
-      "powershell",
-      [
-        "-NoProfile",
-        "-Command",
-        "$paths = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'); Get-ItemProperty $paths -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*Obsidian*' } | ForEach-Object { if ($_.DisplayIcon) { $_.DisplayIcon } elseif ($_.InstallLocation) { Join-Path $_.InstallLocation 'Obsidian.exe' } }",
-      ],
-      { timeoutMs: 8000 },
-    );
-    const line = result.stdout
-      .split(/\r?\n/)
-      .map((entry) => entry.trim().replace(/,\d+$/, "").replace(/^"|"$/g, ""))
-      .find((entry) => /Obsidian\.exe/i.test(entry));
-    if (line && pathExists(line)) return line;
-  } catch {
-    // PowerShell may be restricted
   }
   return undefined;
 }

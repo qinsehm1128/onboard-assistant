@@ -48,6 +48,26 @@ export function windowsDriveRoots(exists: (candidate: string) => boolean = pathE
   return roots;
 }
 
+export function isWindowsSystemDrive(root: string): boolean {
+  return /^[cC]:\\?$/.test(root.replace(/[/\\]+$/, "\\"));
+}
+
+export function obsidianWalkRoots(input: {
+  drives: string[];
+  localAppData?: string;
+}): string[] {
+  const roots: string[] = [];
+  for (const drive of input.drives) {
+    if (isWindowsSystemDrive(drive)) {
+      roots.push(path.win32.join(drive, "Program Files"), path.win32.join(drive, "Program Files (x86)"));
+      continue;
+    }
+    roots.push(drive);
+  }
+  if (input.localAppData) roots.push(input.localAppData);
+  return uniquePaths(roots);
+}
+
 export function isNoisyDirectory(name: string): boolean {
   const lower = name.toLowerCase();
   return NOISY_DIR_NAMES.has(lower) || lower.startsWith("$");
