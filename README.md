@@ -10,7 +10,7 @@
 | Obsidian | 下载官方 exe / dmg。检测会扫各磁盘常见目录、注册表和已打开的库，不假设一定装在 C 盘。 |
 | Claudian 2.0.15 | 下载插件三个文件。写入扫描到的 Obsidian 库（含其他磁盘上的库）。仍需在 Obsidian 里启用。 |
 | Claude CLI | **不用 PowerShell / 官方脚本。** 先装 Python 和 Node，再执行 `npm install -g @anthropic-ai/claude-code`。单独点这项时也会先把依赖排进队列。 |
-| CC Switch v3.15.0 | 下载 msi / dmg 并尝试安装。**密钥需单独发放、单独配置**，助手不会写入任何密钥。 |
+| CC Switch v3.15.0 | 下载 msi / dmg 并尝试安装。检测找官方 `cc-switch.exe`（用户目录和其他磁盘），不只看 `CC Switch.exe`。**密钥需单独发放、单独配置**。 |
 | Clash Verge Rev v2.4.7 | 下载对应系统安装包，能装则装，否则打开安装包。 |
 | 语音打字 | macOS 打开[豆包输入法](https://shurufa.doubao.com/pc)；Windows 打开[微信输入法](https://z.weixin.qq.com/web/change-log/windows)。官网没有稳定直链，所以这一项按「打开官网」处理。 |
 | 飞书 CLI | 优先 `npm install -g @larksuite/cli`（官方 Go 二进制由 postinstall 下载）。检测会找 `%APPDATA%\\npm`、`~/.local/bin` 等，不只依赖 PATH。失败再解压官方 zip。 |

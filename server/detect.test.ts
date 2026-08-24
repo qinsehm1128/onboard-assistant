@@ -36,4 +36,9 @@ describe("detectItem", () => {
     const lark = await detectItem("lark-cli");
     assert.ok(lark.status === "missing" || lark.status === "installed");
   });
+
+  it("treats CC Switch as missing or needs_config, never unknown", async () => {
+    const item = await detectItem("cc-switch");
+    assert.ok(item.status === "missing" || item.status === "needs_config");
+  });
 });

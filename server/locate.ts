@@ -52,6 +52,54 @@ export function isWindowsSystemDrive(root: string): boolean {
   return /^[cC]:\\?$/.test(root.replace(/[/\\]+$/, "\\"));
 }
 
+export const CC_SWITCH_EXE_NAMES = ["cc-switch.exe", "CC Switch.exe", "CC-Switch.exe"] as const;
+
+export function ccSwitchExeCandidates(input: {
+  home: string;
+  env: NodeJS.ProcessEnv;
+  drives: string[];
+}): string[] {
+  const local = input.env.LOCALAPPDATA || path.join(input.home, "AppData", "Local");
+  const pf = input.env.ProgramFiles || "C:\\Program Files";
+  const pf86 = input.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+  const folders = [
+    path.join(local, "Programs", "CC Switch"),
+    path.join(local, "Programs", "cc-switch"),
+    path.join(local, "CC Switch"),
+    path.join(local, "cc-switch"),
+    path.join(pf, "CC Switch"),
+    path.join(pf, "cc-switch"),
+    path.join(pf86, "CC Switch"),
+    path.join(pf86, "cc-switch"),
+    ...input.drives.flatMap((root) => [
+      path.join(root, "Program Files", "CC Switch"),
+      path.join(root, "Program Files (x86)", "CC Switch"),
+      path.join(root, "CC Switch"),
+      path.join(root, "cc-switch"),
+      path.join(root, "Apps", "CC Switch"),
+      path.join(root, "Software", "CC Switch"),
+      path.join(root, "Tools", "CC Switch"),
+    ]),
+  ];
+  return uniquePaths(folders.flatMap((dir) => CC_SWITCH_EXE_NAMES.map((name) => path.join(dir, name))));
+}
+
+export function windowsAppWalkRoots(input: {
+  drives: string[];
+  localAppData?: string;
+}): string[] {
+  const roots: string[] = [];
+  for (const drive of input.drives) {
+    if (isWindowsSystemDrive(drive)) {
+      roots.push(path.win32.join(drive, "Program Files"), path.win32.join(drive, "Program Files (x86)"));
+      continue;
+    }
+    roots.push(drive);
+  }
+  if (input.localAppData) roots.push(path.join(input.localAppData, "Programs"));
+  return uniquePaths(roots);
+}
+
 export function obsidianWalkRoots(input: {
   drives: string[];
   localAppData?: string;

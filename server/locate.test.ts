@@ -15,6 +15,7 @@ import {
   isWindowsSystemDrive,
   obsidianWalkRoots,
   larkCliCandidates,
+  ccSwitchExeCandidates,
 } from "./locate.ts";
 
 describe("windowsDriveRoots", () => {
@@ -53,6 +54,23 @@ describe("obsidianExeCandidates", () => {
     assert.ok(candidates.some((entry) => entry.includes("Obsidian.exe") && entry.includes("D:")));
     assert.ok(candidates.some((entry) => entry.includes("Obsidian.exe") && entry.includes("E:")));
     assert.ok(candidates.some((entry) => /AppData.Local.Obsidian.Obsidian\.exe/i.test(entry)));
+  });
+});
+
+describe("ccSwitchExeCandidates", () => {
+  it("uses the official cc-switch.exe name and covers other disks", () => {
+    const candidates = ccSwitchExeCandidates({
+      home: "C:\\Users\\alex",
+      env: {
+        LOCALAPPDATA: "C:\\Users\\alex\\AppData\\Local",
+        ProgramFiles: "C:\\Program Files",
+        "ProgramFiles(x86)": "C:\\Program Files (x86)",
+      },
+      drives: ["C:\\", "D:\\", "E:\\"],
+    });
+    assert.ok(candidates.some((entry) => /AppData.Local.Programs.CC Switch.cc-switch\.exe/i.test(entry)));
+    assert.ok(candidates.some((entry) => entry.includes("cc-switch.exe") && entry.includes("D:")));
+    assert.ok(candidates.some((entry) => entry.includes("cc-switch.exe") && entry.includes("E:")));
   });
 });
 

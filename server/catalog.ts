@@ -84,7 +84,7 @@ export const CATALOG: CatalogItem[] = [
     id: "cc-switch",
     name: "密钥配置（CC Switch）",
     category: "ai",
-    summary: "密钥切换工具。安装包可以自动下载，密钥需单独发放、单独配置。",
+    summary: "密钥切换工具。检测会找官方 cc-switch.exe（含其他磁盘和用户目录），不只看 C 盘默认路径。",
     docsUrl: "https://github.com/farion1231/cc-switch/releases/tag/v3.15.0",
     versionHint: "v3.15.0",
     notes: "需要单独配置，密钥单独发放。",

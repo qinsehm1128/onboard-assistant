@@ -4,6 +4,8 @@ import path from "node:path";
 import type { ItemState, TargetOs } from "../shared/types.ts";
 import { runCommand, tryVersion } from "./exec.ts";
 import {
+  CC_SWITCH_EXE_NAMES,
+  ccSwitchExeCandidates,
   claudianManifestPath,
   findLarkCli,
   isNoisyDirectory,
@@ -13,6 +15,7 @@ import {
   parseObsidianVaultPaths,
   uniquePaths,
   walkFind,
+  windowsAppWalkRoots,
   windowsDriveRoots,
 } from "./locate.ts";
 import { firstExisting, hostPlatform, refreshProcessPath } from "./paths.ts";
@@ -154,21 +157,27 @@ function parseRegSz(stdout: string): string | undefined {
   return value || undefined;
 }
 
-async function windowsLocateObsidian(): Promise<string | undefined> {
-  const keys = [
-    "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Obsidian.exe",
-    "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Obsidian.exe",
-  ];
-  for (const key of keys) {
-    try {
-      const result = await runCommand("reg", ["query", key, "/ve"], { timeoutMs: 5000 });
-      const value = parseRegSz(result.stdout);
-      if (value && pathExists(value)) return value;
-    } catch {
-      // registry key may not exist
+async function windowsLocateApp(exeNames: string[]): Promise<string | undefined> {
+  for (const name of exeNames) {
+    for (const hive of ["HKLM", "HKCU"] as const) {
+      try {
+        const result = await runCommand(
+          "reg",
+          ["query", `${hive}\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${name}`, "/ve"],
+          { timeoutMs: 5000 },
+        );
+        const value = parseRegSz(result.stdout);
+        if (value && pathExists(value)) return value;
+      } catch {
+        // registry key may not exist
+      }
     }
   }
   return undefined;
+}
+
+async function windowsLocateObsidian(): Promise<string | undefined> {
+  return windowsLocateApp(["Obsidian.exe"]);
 }
 
 async function resolveObsidian(): Promise<DiscoverSnapshot> {
@@ -193,24 +202,40 @@ export function listObsidianVaults(): string[] {
   return cachedDiscover().vaults;
 }
 
-function ccSwitchPath(): string | undefined {
+function findCcSwitchSync(): string | undefined {
   if (process.platform === "darwin") {
-    return firstExisting(["/Applications/CC Switch.app", "/Applications/CC-Switch.app"]);
+    return firstExisting([
+      "/Applications/CC Switch.app",
+      "/Applications/CC-Switch.app",
+      path.join(os.homedir(), "Applications", "CC Switch.app"),
+      path.join(os.homedir(), "Applications", "CC-Switch.app"),
+    ]);
   }
+  if (process.platform !== "win32") return undefined;
+  const known = firstExisting(
+    ccSwitchExeCandidates({
+      home: os.homedir(),
+      env: process.env,
+      drives: windowsDriveRoots(),
+    }),
+  );
+  if (known) return known;
+  const local = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+  return walkFind(
+    windowsAppWalkRoots({
+      drives: windowsDriveRoots(),
+      localAppData: local,
+    }),
+    /^(cc-switch|CC Switch|CC-Switch)\.exe$/i,
+    { maxDepth: 3, maxVisits: 2000, stopAfter: 2 },
+  )[0];
+}
+
+async function resolveCcSwitch(): Promise<string | undefined> {
+  const found = findCcSwitchSync();
+  if (found) return found;
   if (process.platform === "win32") {
-    const local = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-    const pf = process.env.ProgramFiles || "C:\\Program Files";
-    const drives = windowsDriveRoots();
-    const candidates = [
-      path.join(pf, "CC Switch", "CC Switch.exe"),
-      path.join(pf, "cc-switch", "cc-switch.exe"),
-      path.join(local, "Programs", "CC Switch", "CC Switch.exe"),
-      ...drives.flatMap((root) => [
-        path.join(root, "Program Files", "CC Switch", "CC Switch.exe"),
-        path.join(root, "CC Switch", "CC Switch.exe"),
-      ]),
-    ];
-    return firstExisting(candidates);
+    return windowsLocateApp([...CC_SWITCH_EXE_NAMES]);
   }
   return undefined;
 }
@@ -270,10 +295,10 @@ export async function detectItem(id: string): Promise<ItemState> {
     case "claude-cli":
       return appState(id, (await tryVersion("claude")) ? "claude" : undefined, await tryVersion("claude"));
     case "cc-switch": {
-      const found = ccSwitchPath();
+      const found = await resolveCcSwitch();
       return found
         ? { id, status: "needs_config", filePath: found, message: "已安装，密钥需单独配置" }
-        : { id, status: "missing", message: "未检测到本机安装" };
+        : { id, status: "missing", message: "未在各磁盘 / 用户目录中检测到 CC Switch" };
     }
     case "clash-verge":
       return appState(id, clashPath());
