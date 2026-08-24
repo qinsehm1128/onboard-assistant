@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
 import type { Arch, HostPlatform } from "../shared/types.ts";
+import { findNodeHome, nodeInstallDirCandidates, uniquePaths, windowsDriveRoots } from "./locate.ts";
 
 export const API_PORT = 43174;
 export const UI_PORT = 43173;
@@ -28,17 +29,45 @@ export function itemDir(id: string): string {
   return dir;
 }
 
+const runtimePathPrefixes: string[] = [];
+
+export function rememberPathEntry(dir: string): void {
+  if (!dir) return;
+  try {
+    if (!fs.existsSync(dir)) return;
+  } catch {
+    return;
+  }
+  if (!runtimePathPrefixes.some((entry) => entry.toLowerCase() === dir.toLowerCase())) {
+    runtimePathPrefixes.push(dir);
+  }
+}
+
+export function refreshProcessPath(): void {
+  const nodeHome = findNodeHome();
+  if (nodeHome) rememberPathEntry(nodeHome);
+  process.env.PATH = enrichedEnv().PATH;
+}
+
 export function extraPathEntries(): string[] {
   const home = os.homedir();
   if (process.platform === "win32") {
     const local = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
     const pf = process.env["ProgramFiles"] || "C:\\Program Files";
     const pf86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
-    return [
+    const roaming = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+    const nodeHomes = nodeInstallDirCandidates({
+      home,
+      env: process.env,
+      drives: windowsDriveRoots(),
+    });
+    return uniquePaths([
+      ...runtimePathPrefixes,
+      ...nodeHomes,
+      path.join(roaming, "npm"),
       path.join(pf, "Git", "cmd"),
       path.join(pf, "Git", "bin"),
       path.join(pf86, "Git", "cmd"),
-      path.join(pf, "nodejs"),
       path.join(local, "Programs", "Python", "Python312"),
       path.join(local, "Programs", "Python", "Python312", "Scripts"),
       path.join(local, "Programs", "Python", "Python313"),
@@ -46,9 +75,10 @@ export function extraPathEntries(): string[] {
       path.join(local, "Programs", "Obsidian"),
       path.join(home, "AppData", "Local", "Microsoft", "WinGet", "Links"),
       path.join(home, ".local", "bin"),
-    ];
+    ]);
   }
-  return [
+  return uniquePaths([
+    ...runtimePathPrefixes,
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/usr/local/git/bin",
@@ -57,12 +87,13 @@ export function extraPathEntries(): string[] {
     "/Library/Frameworks/Python.framework/Versions/3.12/bin",
     "/Library/Frameworks/Python.framework/Versions/3.13/bin",
     "/Applications/Obsidian.app/Contents/MacOS",
-  ];
+    path.join(home, "Applications", "Obsidian.app", "Contents", "MacOS"),
+  ]);
 }
 
 export function enrichedEnv(): NodeJS.ProcessEnv {
   const delimiter = process.platform === "win32" ? ";" : ":";
-  const current = process.env.PATH || "";
+  const current = (process.env.PATH || "").split(delimiter);
   const extra = extraPathEntries().filter((entry) => {
     try {
       return fs.existsSync(entry);
@@ -72,7 +103,7 @@ export function enrichedEnv(): NodeJS.ProcessEnv {
   });
   return {
     ...process.env,
-    PATH: [...extra, current].join(delimiter),
+    PATH: uniquePaths([...extra, ...current]).join(delimiter),
   };
 }
 

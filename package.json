@@ -1,7 +1,7 @@
 {
   "name": "onboard-assistant",
   "private": false,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/qinsehm1128/onboard-assistant.git"
@@ -21,7 +21,7 @@
     "build": "tsc -b && vite build && esbuild server/start.ts --bundle --platform=node --format=esm --outfile=dist-server/start.js --packages=external",
     "typecheck": "tsc -b",
     "start": "tsx server/index.ts --serve",
-    "test": "tsx --test server/resolve.test.ts server/catalog.test.ts server/detect.test.ts server/app.test.ts server/update.test.ts",
+    "test": "tsx --test server/resolve.test.ts server/catalog.test.ts server/detect.test.ts server/app.test.ts server/update.test.ts server/locate.test.ts",
     "lint": "oxlint server src electron shared",
     "ci": "npm run lint && npm run typecheck && npm test && npm run build",
     "dist:win": "npm run build && electron-builder --win --publish never",

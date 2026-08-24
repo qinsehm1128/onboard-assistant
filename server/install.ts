@@ -5,11 +5,12 @@ import extractZip from "extract-zip";
 import type { Arch, ItemState, TargetOs } from "../shared/types.ts";
 import { itemById, voiceTypingDocs } from "./catalog.ts";
 import { log, setState } from "./bus.ts";
-import { detectItem, listObsidianVaults } from "./detect.ts";
+import { detectItem, invalidateDiscoverCache, listObsidianVaults } from "./detect.ts";
 import { downloadFile } from "./download.ts";
 import { commandExists, runCommand, tryVersion } from "./exec.ts";
 import { launchDetached, openPath, openUrl } from "./launch.ts";
-import { downloadDir, hostArch, hostPlatform, itemDir } from "./paths.ts";
+import { findNodeHome } from "./locate.ts";
+import { downloadDir, hostArch, hostPlatform, itemDir, refreshProcessPath, rememberPathEntry } from "./paths.ts";
 import { resolveDownload } from "./resolve.ts";
 
 const abortControllers = new Map<string, AbortController>();
@@ -242,6 +243,12 @@ function formatBytes(value: number): string {
 }
 
 async function finishDetect(id: string, message: string): Promise<ItemState> {
+  if (id === "node" || id === "python" || id === "git") {
+    const nodeHome = findNodeHome();
+    if (nodeHome) rememberPathEntry(nodeHome);
+    refreshProcessPath();
+  }
+  invalidateDiscoverCache();
   const state = await detectItem(id);
   if (state.status === "missing") {
     return setState({ ...state, status: "needs_manual", message: `${message}，但当前终端还检测不到，请新开一个终端或重启助手后再检测` });
@@ -268,6 +275,7 @@ async function installGitMac(): Promise<ItemState> {
 }
 
 async function installClaudeCli(os: TargetOs): Promise<ItemState> {
+  refreshProcessPath();
   setState({ id: "claude-cli", status: "installing", message: "检查 Python / Node，再用 npm 安装 Claude CLI" });
   if (sameOs(os)) {
     const python = await detectItem("python");
@@ -279,6 +287,7 @@ async function installClaudeCli(os: TargetOs): Promise<ItemState> {
     if (node.status !== "installed" || !(await commandExists("npm"))) {
       log("info", "Node / npm 未就绪，先安装 Node.js", "claude-cli");
       await runInstall("node", os);
+      refreshProcessPath();
     }
   }
 
@@ -306,14 +315,22 @@ async function installClaudeCli(os: TargetOs): Promise<ItemState> {
 }
 
 async function installLarkCli(os: TargetOs, spec: { url: string; filename: string }, signal: AbortSignal): Promise<ItemState> {
-  if (sameOs(os) && (await commandExists("npx"))) {
-    setState({ id: "lark-cli", status: "installing", message: "正在执行 npx @larksuite/cli@latest install" });
-    const result = await runCommand("npx", ["--yes", "@larksuite/cli@latest", "install"], {
-      itemId: "lark-cli",
-      timeoutMs: 12 * 60 * 1000,
-    });
-    if (result.code === 0) return await finishDetect("lark-cli", "已通过官方 npx 安装");
-    log("warn", "npx 安装未成功，改为下载官方二进制", "lark-cli");
+  refreshProcessPath();
+  if (sameOs(os)) {
+    try {
+      if (await commandExists("npx")) {
+        setState({ id: "lark-cli", status: "installing", message: "正在执行 npx @larksuite/cli@latest install" });
+        const result = await runCommand("npx", ["--yes", "@larksuite/cli@latest", "install"], {
+          itemId: "lark-cli",
+          timeoutMs: 12 * 60 * 1000,
+        });
+        if (result.code === 0) return await finishDetect("lark-cli", "已通过官方 npx 安装");
+        log("warn", "npx 安装未成功，改为下载官方二进制", "lark-cli");
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      log("warn", `npx 无法启动，改为下载官方二进制：${detail}`, "lark-cli");
+    }
   }
 
   const dest = path.join(itemDir("lark-cli"), spec.filename);

@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
+import { findNodeHome, findNpmInvocation } from "./locate.ts";
 import { enrichedEnv } from "./paths.ts";
 import { log } from "./bus.ts";
 
@@ -20,10 +22,11 @@ export function runCommand(
   } = {},
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const rewritten = rewriteCommand(command, args, options.shell ?? false);
+    const child = spawn(rewritten.command, rewritten.args, {
       cwd: options.cwd,
       env: enrichedEnv(),
-      shell: options.shell ?? false,
+      shell: rewritten.shell,
       windowsHide: true,
     });
 
@@ -54,7 +57,8 @@ export function runCommand(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      reject(error);
+      const detail = error instanceof Error ? error.message : String(error);
+      reject(new Error(`无法启动 ${rewritten.command}：${detail}`));
     });
     child.on("close", (code) => {
       if (settled) return;
@@ -65,7 +69,32 @@ export function runCommand(
   });
 }
 
+function rewriteCommand(
+  command: string,
+  args: string[],
+  shell: boolean,
+): { command: string; args: string[]; shell: boolean } {
+  if (command === "npm" || command === "npx") {
+    const invocation = findNpmInvocation(command);
+    if (invocation) {
+      return {
+        command: invocation.command,
+        args: [...invocation.prefix, ...args],
+        shell: invocation.shell,
+      };
+    }
+    if (process.platform === "win32") {
+      return { command, args, shell: true };
+    }
+  }
+  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(command)) {
+    return { command, args, shell: true };
+  }
+  return { command, args, shell };
+}
+
 export async function commandExists(bin: string): Promise<boolean> {
+  if ((bin === "npm" || bin === "npx") && findNpmInvocation(bin)) return true;
   const probe = process.platform === "win32" ? ["where", [bin]] : ["which", [bin]];
   try {
     const result = await runCommand(probe[0] as string, probe[1] as string[], { timeoutMs: 8000 });
@@ -77,7 +106,14 @@ export async function commandExists(bin: string): Promise<boolean> {
 
 export async function tryVersion(bin: string, args = ["--version"]): Promise<string | undefined> {
   try {
-    const result = await runCommand(bin, args, { timeoutMs: 8000 });
+    const resolved =
+      bin === "node"
+        ? (() => {
+            const home = findNodeHome();
+            return home ? path.join(home, process.platform === "win32" ? "node.exe" : "node") : bin;
+          })()
+        : bin;
+    const result = await runCommand(resolved, args, { timeoutMs: 8000 });
     if (result.code !== 0) return undefined;
     const text = `${result.stdout}\n${result.stderr}`.trim();
     const match = text.match(/v?\d+\.\d+(\.\d+)?/);

@@ -2,8 +2,32 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ItemState, TargetOs } from "../shared/types.ts";
+import { runCommand, tryVersion } from "./exec.ts";
+import {
+  claudianManifestPath,
+  isNoisyDirectory,
+  obsidianConfigCandidates,
+  obsidianExeCandidates,
+  parseObsidianVaultPaths,
+  uniquePaths,
+  walkFind,
+  windowsDriveRoots,
+} from "./locate.ts";
 import { firstExisting, hostPlatform } from "./paths.ts";
-import { tryVersion } from "./exec.ts";
+
+interface DiscoverSnapshot {
+  at: number;
+  exe?: string;
+  vaults: string[];
+  claudian?: string;
+}
+
+let discoverCache: DiscoverSnapshot | null = null;
+const DISCOVER_TTL_MS = 20_000;
+
+export function invalidateDiscoverCache(): void {
+  discoverCache = null;
+}
 
 function appState(id: string, found: string | undefined, version?: string): ItemState {
   if (!found) return { id, status: "missing", message: "未检测到本机安装" };
@@ -16,43 +40,165 @@ function appState(id: string, found: string | undefined, version?: string): Item
   };
 }
 
-export function obsidianAppPath(): string | undefined {
-  if (process.platform === "darwin") return firstExisting(["/Applications/Obsidian.app"]);
-  if (process.platform === "win32") {
-    const local = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-    const pf = process.env["ProgramFiles"] || "C:\\Program Files";
+function pathExists(candidate: string): boolean {
+  try {
+    return fs.existsSync(candidate);
+  } catch {
+    return false;
+  }
+}
+
+function findObsidianExecutableSync(): string | undefined {
+  if (process.platform === "darwin") {
     return firstExisting([
-      path.join(local, "Obsidian", "Obsidian.exe"),
-      path.join(local, "Programs", "Obsidian", "Obsidian.exe"),
-      path.join(pf, "Obsidian", "Obsidian.exe"),
+      "/Applications/Obsidian.app",
+      path.join(os.homedir(), "Applications", "Obsidian.app"),
     ]);
   }
-  return firstExisting(["/usr/bin/obsidian", "/opt/Obsidian/obsidian"]);
+  if (process.platform !== "win32") {
+    return firstExisting(["/usr/bin/obsidian", "/opt/Obsidian/obsidian"]);
+  }
+  const known = firstExisting(
+    obsidianExeCandidates({
+      home: os.homedir(),
+      env: process.env,
+      drives: windowsDriveRoots(),
+    }),
+  );
+  if (known) return known;
+  return walkFind(windowsDriveRoots(), "Obsidian.exe", {
+    maxDepth: 4,
+    maxVisits: 8000,
+    stopAfter: 4,
+  })[0];
+}
+
+function vaultScanRoots(): string[] {
+  const home = os.homedir();
+  const roots = [
+    path.join(home, "Documents"),
+    path.join(home, "Desktop"),
+    path.join(home, "Downloads"),
+    path.join(home, "OneDrive"),
+    path.join(home, "Notes"),
+    path.join(home, "Obsidian"),
+    path.join(home, "vaults"),
+    path.join(home, "文档"),
+    path.join(home, "笔记"),
+  ];
+  if (process.platform === "win32") {
+    for (const drive of windowsDriveRoots()) {
+      if (/^c:\\$/i.test(drive)) continue;
+      roots.push(
+        drive,
+        path.join(drive, "Notes"),
+        path.join(drive, "Obsidian"),
+        path.join(drive, "vaults"),
+        path.join(drive, "文档"),
+        path.join(drive, "笔记"),
+      );
+    }
+  }
+  return roots.filter(pathExists);
+}
+
+function collectVaults(exe?: string): string[] {
+  const configs = obsidianConfigCandidates({
+    home: os.homedir(),
+    env: process.env,
+    exePath: exe,
+  });
+  const fromConfig: string[] = [];
+  for (const config of configs) {
+    try {
+      fromConfig.push(...parseObsidianVaultPaths(fs.readFileSync(config, "utf8")));
+    } catch {
+      // ignore missing or invalid config
+    }
+  }
+  const fromWalk = walkFind(vaultScanRoots(), ".obsidian", {
+    maxDepth: 5,
+    maxVisits: 6000,
+    stopAfter: 20,
+    skipDir: (name) => isNoisyDirectory(name) || name.toLowerCase() === "library",
+  }).map((dir) => path.dirname(dir));
+  return uniquePaths([...fromConfig, ...fromWalk]).filter(pathExists);
+}
+
+function scanObsidianNow(): DiscoverSnapshot {
+  const exe = findObsidianExecutableSync();
+  const vaults = collectVaults(exe);
+  const claudian = vaults.map(claudianManifestPath).find(pathExists);
+  return { at: Date.now(), exe, vaults, claudian };
+}
+
+function cachedDiscover(): DiscoverSnapshot {
+  if (discoverCache && Date.now() - discoverCache.at < DISCOVER_TTL_MS) return discoverCache;
+  discoverCache = scanObsidianNow();
+  return discoverCache;
+}
+
+function parseRegSz(stdout: string): string | undefined {
+  const match = stdout.match(/REG_SZ\s+(.+)/i);
+  const value = match?.[1]?.trim().replace(/^"|"$/g, "");
+  return value || undefined;
+}
+
+async function windowsLocateObsidian(): Promise<string | undefined> {
+  const keys = [
+    "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Obsidian.exe",
+    "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Obsidian.exe",
+  ];
+  for (const key of keys) {
+    try {
+      const result = await runCommand("reg", ["query", key, "/ve"], { timeoutMs: 5000 });
+      const value = parseRegSz(result.stdout);
+      if (value && pathExists(value)) return value;
+    } catch {
+      // registry key may not exist
+    }
+  }
+  try {
+    const result = await runCommand(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        "$paths = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'); Get-ItemProperty $paths -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*Obsidian*' } | ForEach-Object { if ($_.DisplayIcon) { $_.DisplayIcon } elseif ($_.InstallLocation) { Join-Path $_.InstallLocation 'Obsidian.exe' } }",
+      ],
+      { timeoutMs: 8000 },
+    );
+    const line = result.stdout
+      .split(/\r?\n/)
+      .map((entry) => entry.trim().replace(/,\d+$/, "").replace(/^"|"$/g, ""))
+      .find((entry) => /Obsidian\.exe/i.test(entry));
+    if (line && pathExists(line)) return line;
+  } catch {
+    // PowerShell may be restricted
+  }
+  return undefined;
+}
+
+async function resolveObsidian(): Promise<DiscoverSnapshot> {
+  const snap = cachedDiscover();
+  if (snap.exe || process.platform !== "win32") return snap;
+  const fromReg = await windowsLocateObsidian();
+  if (!fromReg) return snap;
+  invalidateDiscoverCache();
+  const next = scanObsidianNow();
+  next.exe = next.exe || fromReg;
+  next.vaults = uniquePaths([...next.vaults, ...collectVaults(fromReg)]);
+  next.claudian = next.vaults.map(claudianManifestPath).find(pathExists);
+  discoverCache = next;
+  return next;
+}
+
+export function obsidianAppPath(): string | undefined {
+  return cachedDiscover().exe;
 }
 
 export function listObsidianVaults(): string[] {
-  const configPath =
-    process.platform === "win32"
-      ? path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "obsidian", "obsidian.json")
-      : path.join(os.homedir(), "Library", "Application Support", "obsidian", "obsidian.json");
-  try {
-    const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
-      vaults?: Record<string, { path?: string }>;
-    };
-    return Object.values(raw.vaults || {})
-      .map((vault) => vault.path)
-      .filter((entry): entry is string => Boolean(entry && fs.existsSync(entry)));
-  } catch {
-    return [];
-  }
-}
-
-function claudianInstalled(): string | undefined {
-  for (const vault of listObsidianVaults()) {
-    const manifest = path.join(vault, ".obsidian", "plugins", "claudian", "manifest.json");
-    if (fs.existsSync(manifest)) return manifest;
-  }
-  return undefined;
+  return cachedDiscover().vaults;
 }
 
 function ccSwitchPath(): string | undefined {
@@ -61,12 +207,18 @@ function ccSwitchPath(): string | undefined {
   }
   if (process.platform === "win32") {
     const local = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-    const pf = process.env["ProgramFiles"] || "C:\\Program Files";
-    return firstExisting([
+    const pf = process.env.ProgramFiles || "C:\\Program Files";
+    const drives = windowsDriveRoots();
+    const candidates = [
       path.join(pf, "CC Switch", "CC Switch.exe"),
       path.join(pf, "cc-switch", "cc-switch.exe"),
       path.join(local, "Programs", "CC Switch", "CC Switch.exe"),
-    ]);
+      ...drives.flatMap((root) => [
+        path.join(root, "Program Files", "CC Switch", "CC Switch.exe"),
+        path.join(root, "CC Switch", "CC Switch.exe"),
+      ]),
+    ];
+    return firstExisting(candidates);
   }
   return undefined;
 }
@@ -77,12 +229,18 @@ function clashPath(): string | undefined {
   }
   if (process.platform === "win32") {
     const local = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-    const pf = process.env["ProgramFiles"] || "C:\\Program Files";
-    return firstExisting([
+    const pf = process.env.ProgramFiles || "C:\\Program Files";
+    const drives = windowsDriveRoots();
+    const candidates = [
       path.join(pf, "Clash Verge", "clash-verge.exe"),
       path.join(local, "Programs", "Clash Verge", "clash-verge.exe"),
       path.join(local, "clash-verge", "clash-verge.exe"),
-    ]);
+      ...drives.flatMap((root) => [
+        path.join(root, "Program Files", "Clash Verge", "clash-verge.exe"),
+        path.join(root, "Clash Verge", "clash-verge.exe"),
+      ]),
+    ];
+    return firstExisting(candidates);
   }
   return undefined;
 }
@@ -97,13 +255,25 @@ export async function detectItem(id: string): Promise<ItemState> {
     }
     case "node":
       return appState(id, (await tryVersion("node")) ? "node" : undefined, await tryVersion("node"));
-    case "obsidian":
-      return appState(id, obsidianAppPath());
+    case "obsidian": {
+      const found = await resolveObsidian();
+      if (found.exe) return appState(id, found.exe);
+      if (found.vaults.length) {
+        return {
+          id,
+          status: "installed",
+          filePath: found.vaults[0],
+          folderPath: found.vaults[0],
+          message: `未在默认目录找到程序，但已扫描到 ${found.vaults.length} 个库`,
+        };
+      }
+      return appState(id, undefined);
+    }
     case "claudian": {
-      const found = claudianInstalled();
-      return found
-        ? { id, status: "installed", filePath: found, message: "已写入 Obsidian 插件目录" }
-        : { id, status: "missing", message: "未在已有 Obsidian 库中发现插件" };
+      const found = await resolveObsidian();
+      return found.claudian
+        ? { id, status: "installed", filePath: found.claudian, message: "已在扫描到的 Obsidian 库中发现插件" }
+        : { id, status: "missing", message: "未在已扫描的磁盘 / 库中发现 Claudian" };
     }
     case "claude-cli":
       return appState(id, (await tryVersion("claude")) ? "claude" : undefined, await tryVersion("claude"));
@@ -131,6 +301,7 @@ export async function detectItem(id: string): Promise<ItemState> {
 }
 
 export async function detectAll(_os: TargetOs): Promise<Record<string, ItemState>> {
+  invalidateDiscoverCache();
   const ids = [
     "git",
     "python",

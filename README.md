@@ -6,9 +6,9 @@
 
 | 项目 | 处理方式 |
 | --- | --- |
-| Git / Python / Node.js | Windows 优先 `winget`，macOS 优先 Homebrew；失败则下载官方安装包。Python / Git 安装包尽量静默并写入 PATH。 |
-| Obsidian | 下载官方 exe / dmg。Windows 尝试静默，失败则打开安装向导；macOS 尝试把 app 拷到「应用程序」。 |
-| Claudian 2.0.15 | 下载插件三个文件。若本机已有 Obsidian 库，会写入 `.obsidian/plugins/claudian/`，仍需在 Obsidian 里启用。 |
+| Git / Python / Node.js | Windows 优先 `winget`，macOS 优先 Homebrew；失败则下载官方安装包。Python / Git 安装包尽量静默并写入 PATH。装完 Node 后用 `node.exe` 调 `npm` / `npx`，避免 Windows 上 `spawn npm ENOENT`。 |
+| Obsidian | 下载官方 exe / dmg。检测会扫各磁盘常见目录、注册表和已打开的库，不假设一定装在 C 盘。 |
+| Claudian 2.0.15 | 下载插件三个文件。写入扫描到的 Obsidian 库（含其他磁盘上的库）。仍需在 Obsidian 里启用。 |
 | Claude CLI | **不用 PowerShell / 官方脚本。** 先装 Python 和 Node，再执行 `npm install -g @anthropic-ai/claude-code`。单独点这项时也会先把依赖排进队列。 |
 | CC Switch v3.15.0 | 下载 msi / dmg 并尝试安装。**密钥需单独发放、单独配置**，助手不会写入任何密钥。 |
 | Clash Verge Rev v2.4.7 | 下载对应系统安装包，能装则装，否则打开安装包。 |
