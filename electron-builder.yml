@@ -13,10 +13,13 @@ mac:
   category: public.app-category.utilities
   target:
     - dmg
+  artifactName: onboard-assistant-${version}-${arch}.${ext}
 win:
   target:
     - nsis
+  artifactName: onboard-assistant-setup-${version}.${ext}
 nsis:
+  artifactName: onboard-assistant-setup-${version}.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
 forceCodeSigning: false

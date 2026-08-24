@@ -56,7 +56,7 @@ npm run dist:win
 npm run dist:mac
 ```
 
-产物在 `release/`。打包只是外壳，真正干活的是本地装机服务。GitHub Actions 里也可以点 **Desktop packages** 工作流，在 Windows / macOS runner 上直接编译出安装包。打 `v*` 标签时会发布到公开 GitHub Release，桌面端和界面都能检测更新。
+产物在 `release/`。Windows 安装包文件名固定为 `onboard-assistant-setup-<version>.exe`，必须和 Release 里的 `latest.yml` 一致，应用内更新才能下到文件。打 `v*` 标签时会发布到公开 GitHub Release，桌面端可以点「下载并安装」。
 
 仓库是公开的：https://github.com/qinsehm1128/onboard-assistant
 

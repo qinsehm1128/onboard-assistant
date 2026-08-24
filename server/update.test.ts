@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { APP_REPO, compareVersions, currentVersion, REPO_URL } from "./update.ts";
 import { expandIds } from "./install.ts";
@@ -16,6 +17,14 @@ describe("update metadata", () => {
     assert.match(currentVersion(), /^\d+\.\d+\.\d+/);
     assert.equal(APP_REPO.owner, "qinsehm1128");
     assert.equal(REPO_URL, "https://github.com/qinsehm1128/onboard-assistant");
+  });
+});
+
+describe("desktop artifact names", () => {
+  it("keeps installer filenames ASCII so GitHub Release matches latest.yml", () => {
+    const raw = readFileSync(new URL("../electron-builder.yml", import.meta.url), "utf8");
+    assert.match(raw, /artifactName:\s*onboard-assistant-setup-\$\{version\}\.\$\{ext\}/);
+    assert.match(raw, /artifactName:\s*onboard-assistant-\$\{version\}-\$\{arch\}\.\$\{ext\}/);
   });
 });
 
