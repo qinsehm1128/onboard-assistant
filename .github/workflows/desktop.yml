@@ -43,7 +43,7 @@ jobs:
           key: electron-win-${{ hashFiles('package-lock.json') }}
       - run: npm ci
       - run: npm run dist:win
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-installer
           path: |
@@ -71,7 +71,7 @@ jobs:
           key: electron-mac-${{ hashFiles('package-lock.json') }}
       - run: npm ci
       - run: npm run dist:mac
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-installer
           path: |
